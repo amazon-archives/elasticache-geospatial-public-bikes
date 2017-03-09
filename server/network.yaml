@@ -1,0 +1,170 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Provides networking configuration for public-bikes sample"
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "VPC Config"
+        Parameters:
+          - "pVpcName"
+          - "pVpcCIDR"
+          - "pPrivateSubnet1CIDR"
+          - "pPublicSubnet1CIDR"
+
+    ParameterLabels:
+      pVpcName:
+        default: "Name of VPC"
+      pVpcCIDR:
+        default: "CIDR for VPC"
+      pPrivateSubnet1CIDR:
+        default: "CIDR for Private Subnet 1"
+      pPublicSubnet1CIDR:
+        default: "CIDR for Public Subnet 1"
+      
+Parameters:
+  pVpcName:
+    Description: "Name of the VPC"
+    Type: "String"
+    Default: "public-bikes-vpc"
+  pVpcCIDR:
+    Description: "CIDR block for VPC (recommend /16)"
+    Type: "String"
+    Default: "10.100.0.0/16"
+  pPrivateSubnet1CIDR:
+    Description: "CIDR block for Private Subnet"
+    Type: "String"
+    Default: "10.100.0.0/18"
+  pPublicSubnet1CIDR:
+    Description: "CIDR block for Public Subnet"
+    Type: "String"
+    Default: "10.100.64.0/18"
+
+    ## private subnet 2: 10.100.128.0/18
+    ## public subnet 2: 10.100.192.0/18
+
+Resources:
+  VPC:
+    Type: "AWS::EC2::VPC"
+    Properties:
+      CidrBlock: !Ref "pVpcCIDR"
+      EnableDnsSupport: "true"
+      EnableDnsHostnames: "true"
+      Tags:
+        -
+          Key: "Name"
+          Value: !Ref "pVpcName"
+
+  PrivateSubnet1:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Ref "pPrivateSubnet1CIDR"
+      VpcId: !Ref VPC
+      Tags:
+        -
+          Key: "Name"
+          Value: !Sub
+            - "${VPC_NAME} Private Subnet 1"
+            - VPC_NAME: !Ref pVpcName
+
+  PublicSubnet1:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Ref "pPublicSubnet1CIDR"
+      VpcId: !Ref VPC
+      Tags:
+        -
+          Key: "Name"
+          Value: !Sub
+            - "${VPC_NAME} Public Subnet 1"
+            - VPC_NAME: !Ref pVpcName
+
+  PrivateRouteTable:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        -
+          Key: "Name"
+          Value: "public-bikes-private-routetable"
+
+  PublicRouteTable:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        -
+          Key: "Name"
+          Value: "public-bikes-public-routetable"
+
+  IGW:
+    Type: "AWS::EC2::InternetGateway"
+    Properties:
+      Tags:
+        -
+          Key: "Name"
+          Value: "public-bikes-igw"
+
+  IgwAttachment:
+    Type: "AWS::EC2::VPCGatewayAttachment"
+    DependsOn:
+      - "IGW"
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref IGW
+
+  NatEIP:
+    Type: "AWS::EC2::EIP"
+    Properties:
+      Domain: "vpc"
+
+  NatGateway:
+    Type: "AWS::EC2::NatGateway"
+    DependsOn:
+      - "IGW"
+    Properties:
+      AllocationId: !GetAtt NatEIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+
+  PrivateRouteToNatGateway:
+    Type: "AWS::EC2::Route"
+    Properties:
+      DestinationCidrBlock: "0.0.0.0/0"
+      RouteTableId: !Ref PrivateRouteTable
+      NatGatewayId: !Ref NatGateway
+
+  PublicRouteToIGW:
+    Type: "AWS::EC2::Route"
+    Properties:
+      DestinationCidrBlock: "0.0.0.0/0"
+      RouteTableId: !Ref PublicRouteTable
+      GatewayId: !Ref IGW
+
+  PrivateSubnet1RouteAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet1
+
+  PublicSubnet1RouteAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1
+
+Outputs:
+  oVPC:
+    Value: !Ref VPC
+    Description: "public-bikes VPC"
+    Export:
+      Name: "public-bikes-vpc"
+
+  oPrivateSubnet1:
+    Value: !Ref PrivateSubnet1
+    Description: "public-bikes Private Subnet 1"
+    Export:
+      Name: "public-bikes-private-subnet"

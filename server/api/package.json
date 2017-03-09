@@ -1,0 +1,12 @@
+{
+  "name": "api",
+  "version": "1.0.0",
+  "description": "Lambda functions to support public-bikes API",
+  "main": "stations.js",
+  "author": "jkahn@",
+  "license": "ISC",
+  "dependencies": {
+    "aws-sdk": "^2.9.0",
+    "redis": "^2.6.5"
+  }
+}

@@ -1,0 +1,165 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: "AWS::Serverless-2016-10-31"
+
+Description: "Backend services and services for public-bikes sample"
+
+
+Resources:
+  
+  #
+  # List Stations
+  #
+  ListStationsFunction:
+    Type: "AWS::Serverless::Function"
+    Properties:
+      Handler: "stations.list"
+      Runtime: "nodejs4.3"
+      CodeUri: "api/"
+      Policies: "AWSLambdaVPCAccessExecutionRole"
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref FunctionSecurityGroup
+        SubnetIds:
+          - !ImportValue "public-bikes-private-subnet"
+      Timeout: 6
+      Environment:
+        Variables:
+          ELASTICACHE_HOST:
+            Fn::GetAtt: ["ECCluster", "RedisEndpoint.Address"]
+          ELASTICACHE_PORT:
+            Fn::GetAtt: ["ECCluster", "RedisEndpoint.Port"]
+          SEARCH_RADIUS: 2
+          SEARCH_RADIUS_UNITS: "mi"  # or 'km', 'm', 'ft'
+          RESULT_COUNT: 10
+      Events:
+        ListStations:
+          Type: "Api"
+          Properties:
+            Path: "/stations"
+            Method: "GET"
+
+  #
+  # Setup Data -- FOR SAMPLE ONLY
+  #
+  SetupStationsFunction:
+    Type: "AWS::Serverless::Function"
+    Properties:
+      Handler: "stations.setup"
+      Runtime: "nodejs4.3"
+      CodeUri: "api/"
+      Policies: "AmazonDynamoDBFullAccess"
+      Timeout: 10
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref DDBTable
+          DATA_URL: "https://feeds.divvybikes.com/stations/stations.json"
+      Events:
+        SetupStations:
+          Type: "Api"
+          Properties:
+            Path: "/stations/setup"
+            Method: "GET"
+
+  #
+  # Stream Processor
+  #
+  StreamProcessorFunction:
+    Type: "AWS::Serverless::Function"
+    Properties:
+      Handler: "index.handler"
+      Runtime: "nodejs4.3"
+      CodeUri: "stream/"
+      Policies: "AWSLambdaVPCAccessExecutionRole"
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref FunctionSecurityGroup
+        SubnetIds:
+          - !ImportValue "public-bikes-private-subnet"
+      Environment:
+        Variables:
+          ELASTICACHE_HOST:
+            Fn::GetAtt: ["ECCluster", "RedisEndpoint.Address"]
+          ELASTICACHE_PORT:
+            Fn::GetAtt: ["ECCluster", "RedisEndpoint.Port"]
+      Events:
+        Stream:
+          Type: "DynamoDB"
+          Properties:
+            Stream: !GetAtt DDBTable.StreamArn
+            StartingPosition: "TRIM_HORIZON"
+
+  #
+  # DynamoDB Table
+  #
+  DDBTable:
+    Type: "AWS::DynamoDB::Table"
+    Properties:
+      AttributeDefinitions:
+        -
+          AttributeName: "uuid"
+          AttributeType: "S"
+      KeySchema:
+        -
+          AttributeName: "uuid"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      StreamSpecification:
+        StreamViewType: "NEW_AND_OLD_IMAGES"
+      TableName: "public-bikes"
+      
+
+  #
+  # ElastiCache
+  #
+  ECCluster:
+    Type: "AWS::ElastiCache::CacheCluster"
+    Properties:
+      Engine: "redis"
+      CacheNodeType: "cache.t2.micro"
+      NumCacheNodes: 1
+      VpcSecurityGroupIds:
+        - !GetAtt ECSecurityGroup.GroupId
+      CacheSubnetGroupName: !Ref ECSubnetGroup
+
+  ECSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "public-bikes - ElastiCache Security Group"
+      VpcId: !ImportValue "public-bikes-vpc"
+      SecurityGroupIngress:
+        -
+          IpProtocol: "tcp"
+          FromPort: 6379
+          ToPort: 6379
+          SourceSecurityGroupId: !Ref FunctionSecurityGroup
+
+  ECSubnetGroup:
+    Type: "AWS::ElastiCache::SubnetGroup"
+    Properties:
+      Description: "public-bikes - ElastiCache Subnet Group"
+      SubnetIds:
+        - !ImportValue "public-bikes-private-subnet"
+
+  FunctionSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "public-bikes - Lambda Function Security Group"
+      VpcId: !ImportValue "public-bikes-vpc"
+
+
+#
+# Outputs
+#
+Outputs:
+  ApiDomain:
+    Description: "API Domain"
+    Value: !Sub "${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com"
+  CacheEndpoint:
+    Description: "ElastiCache Endpoint"
+    Value:
+      Fn::GetAtt: ["ECCluster", "RedisEndpoint.Address"]
+
+

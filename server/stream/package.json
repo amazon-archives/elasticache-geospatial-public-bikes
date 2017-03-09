@@ -1,0 +1,11 @@
+{
+  "name": "public-bikes-stream",
+  "version": "1.0.0",
+  "description": "Lambda function to support public-bikes DynamoDB Stream",
+  "main": "index.js",
+  "author": "jkahn@",
+  "license": "ISC",
+  "dependencies": {
+    "redis": "^2.6.5"
+  }
+}
