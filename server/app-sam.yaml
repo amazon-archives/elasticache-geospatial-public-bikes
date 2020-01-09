@@ -14,7 +14,7 @@ Resources:
     Type: "AWS::Serverless::Function"
     Properties:
       Handler: "stations.list"
-      Runtime: "nodejs4.3"
+      Runtime: "nodejs10.x"
       CodeUri: "api/"
       Policies: "AWSLambdaVPCAccessExecutionRole"
       VpcConfig:
@@ -46,7 +46,7 @@ Resources:
     Type: "AWS::Serverless::Function"
     Properties:
       Handler: "stations.setup"
-      Runtime: "nodejs4.3"
+      Runtime: "nodejs10.x"
       CodeUri: "api/"
       Policies: "AmazonDynamoDBFullAccess"
       Timeout: 10
@@ -68,7 +68,7 @@ Resources:
     Type: "AWS::Serverless::Function"
     Properties:
       Handler: "index.handler"
-      Runtime: "nodejs4.3"
+      Runtime: "nodejs10.x"
       CodeUri: "stream/"
       Policies: "AWSLambdaVPCAccessExecutionRole"
       VpcConfig:
